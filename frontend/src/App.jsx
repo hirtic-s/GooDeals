@@ -150,7 +150,7 @@ export default function App() {
     debounceRef.current = setTimeout(async () => {
       try {
         const res = await fetch(
-          `http://localhost:8080/api/v1/search?query=${encodeURIComponent(searchQuery.trim())}`
+          `${import.meta.env.VITE_API_URL}/api/v1/search?query=${encodeURIComponent(searchQuery.trim())}`
         );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
