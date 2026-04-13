@@ -1,0 +1,78 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+  body {
+    background: #0f1116;
+    color: #ffffff;
+    font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: rgba(108,180,228,0.25); }
+}
+
+@layer utilities {
+  .font-mono { font-family: 'IBM Plex Mono', Menlo, monospace; }
+
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+  /* Storage step slider — dark theme */
+  .step-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 2px;
+    border-radius: 0;
+    outline: none;
+    cursor: pointer;
+  }
+  .step-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 0;
+    background: #6cb4e4;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 0 8px rgba(108,180,228,0.6);
+    transition: transform 0.12s;
+  }
+  .step-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.3);
+    box-shadow: 0 0 14px rgba(108,180,228,0.9);
+  }
+  .step-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 0;
+    background: #6cb4e4;
+    border: none;
+    cursor: pointer;
+  }
+
+  /* Price range slider (Sidebar) */
+  .range-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 0;
+    background: #6cb4e4;
+    border: none;
+    cursor: pointer;
+  }
+  .range-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 0;
+    background: #6cb4e4;
+    border: none;
+    cursor: pointer;
+  }
+}
