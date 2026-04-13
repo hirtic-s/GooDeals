@@ -6,9 +6,11 @@
 
 @layer base {
   * { box-sizing: border-box; }
+  :root { --slider-track-empty: #D1D5DB; }
+  .dark  { --slider-track-empty: #252830; }
   body {
-    background: #0f1116;
-    color: #ffffff;
+    background: #f0f7ff;
+    color: #0f1116;
     font-family: 'Inter', sans-serif;
     -webkit-font-smoothing: antialiased;
   }

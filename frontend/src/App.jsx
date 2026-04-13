@@ -2,8 +2,17 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import Navbar from './components/Navbar';
 import ProductCard, { HeroCard } from './components/ProductCard';
 import CompareTray from './components/CompareTray';
-import { MOCK_PRODUCTS } from './data/mockProducts';
-import { SlidersHorizontal, Loader2 } from 'lucide-react';
+import { MOCK_PRODUCTS, PRICE_MAX } from './data/mockProducts';
+import Sidebar from './components/Sidebar';
+import { SlidersHorizontal } from 'lucide-react';
+
+const DEFAULT_FILTERS = {
+  priceRange: [0, PRICE_MAX],
+  brands: [],
+  stores: [],
+  rams: [],
+  storages: [],
+};
 
 // ── Parsing helpers ────────────────────────────────────────────────────────────
 
@@ -121,11 +130,13 @@ function mapApiResult(r, index) {
 const CATEGORY_CHIPS = ['ALL', 'MOBILES', 'LAPTOPS', 'TABLETS', 'WEARABLES'];
 
 export default function App() {
+  const [isDark, setIsDark] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('ALL');
   const [compareIds, setCompareIds] = useState(new Set());
   const [searchResults, setSearchResults] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const debounceRef = useRef(null);
 
   useEffect(() => {
@@ -156,7 +167,23 @@ export default function App() {
 
   const baseProducts = searchResults !== null ? searchResults : MOCK_PRODUCTS;
 
-  const colorGroups = useMemo(() => groupByColor(baseProducts), [baseProducts]);
+  const filteredProducts = useMemo(() => {
+    const { priceRange, brands, stores, rams, storages } = filters;
+    return baseProducts.filter(p => {
+      if (activeCategory !== 'ALL' && !activeCategory.startsWith(p.category.toUpperCase())) return false;
+      if (p.currentPrice < priceRange[0] || p.currentPrice > priceRange[1]) return false;
+      if (brands.length > 0 && !brands.includes(p.brand)) return false;
+      if (stores.length > 0 && !stores.includes(p.storeSource)) return false;
+      if (rams.length > 0 && !rams.includes(p.ram)) return false;
+      if (storages.length > 0) {
+        const storage = extractStorage(p.title, p.storage);
+        if (!storages.includes(storage)) return false;
+      }
+      return true;
+    });
+  }, [baseProducts, filters, activeCategory]);
+
+  const colorGroups = useMemo(() => groupByColor(filteredProducts), [filteredProducts]);
   const allColorGroups = useMemo(() => groupByColor(baseProducts), [baseProducts]);
 
   function toggleCompare(id) {
@@ -171,106 +198,160 @@ export default function App() {
   const heroGroup = colorGroups[0] ?? null;
   const gridGroups = colorGroups.slice(1);
 
+  const isHomeView = !searchQuery;
+
   return (
-    <div className="min-h-screen bg-surface">
-      <Navbar searchQuery={searchQuery} onSearchChange={setSearchQuery} />
+    <div className={`${isDark ? 'dark bg-surface' : 'bg-paper'} min-h-screen`}>
+      <Navbar searchQuery={searchQuery} onSearchChange={setSearchQuery} hideSearch={isHomeView} isDark={isDark} toggleTheme={() => setIsDark(d => !d)} />
 
-      <main className="max-w-[1400px] mx-auto px-6 py-8 flex flex-col gap-8">
+      <main className="max-w-[1400px] mx-auto px-6 flex flex-col gap-8">
 
-        {/* ── Section header ───────────────────────────────────────── */}
-        <div className="flex items-start justify-between">
-          <div className="space-y-3">
-            <p className="text-[10px] font-mono text-muted tracking-[0.3em] uppercase">
-              {isSearching
-                ? '[ SEARCHING… ]'
-                : searchQuery
-                ? `[ RESULTS: "${searchQuery.toUpperCase()}" ]`
-                : '[ NEW COLLECTION ]'}
-            </p>
-            <h2 className="text-5xl font-black uppercase leading-none text-white tracking-tight">
-              {searchQuery
-                ? searchQuery.toUpperCase()
-                : 'BEST DEALS'}
-            </h2>
-          </div>
-
-          {/* Right metadata + FILTERS */}
-          <div className="hidden md:flex flex-col items-end gap-3">
-            <button className="text-xs font-mono text-white border border-white px-5 py-2 hover:bg-white hover:text-surface transition-all tracking-[0.2em]">
-              <span className="flex items-center gap-2">
-                <SlidersHorizontal size={12} />
-                FILTERS
-              </span>
-            </button>
-            <div className="text-right">
-              <p className="text-[10px] font-mono text-muted tracking-widest">
-                {isSearching ? 'LOADING…' : `${colorGroups.length} MODEL${colorGroups.length !== 1 ? 'S' : ''} FOUND`}
-              </p>
+        {isHomeView ? (
+          /* ── HOME VIEW ──────────────────────────────────────────── */
+          <div className="flex flex-col items-center justify-center min-h-[80vh] gap-8">
+            {/* Giant search input */}
+            <div className="w-full max-w-3xl border-b-2 border-[#0F1116] dark:border-white">
+              <input
+                type="text"
+                placeholder="SEARCH STORES..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                autoFocus
+                className="w-full bg-transparent text-[#0F1116] dark:text-white text-6xl font-mono font-black
+                           placeholder:text-muted caret-accent
+                           focus:outline-none py-4 tracking-tight"
+              />
             </div>
-          </div>
-        </div>
 
-        {/* ── Category chips ───────────────────────────────────────── */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {CATEGORY_CHIPS.map(cat => (
-            <button
-              key={cat}
-              onClick={() => setActiveCategory(cat)}
-              className={`text-[10px] font-mono tracking-[0.2em] px-3 py-1.5 border transition-all ${
-                activeCategory === cat
-                  ? 'border-accent text-accent bg-accent/10'
-                  : 'border-border text-muted hover:border-muted hover:text-white'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
-
-        {/* ── Content ──────────────────────────────────────────────── */}
-        {isSearching ? (
-          <div className="flex flex-col items-center gap-4 py-32 text-center border border-border">
-            <Loader2 size={28} className="text-accent animate-spin" />
-            <p className="text-xs font-mono text-muted tracking-[0.2em]">SCANNING STORES…</p>
-          </div>
-
-        ) : colorGroups.length === 0 ? (
-          <div className="flex flex-col items-center gap-4 py-32 text-center border border-border">
-            <p className="text-5xl font-black text-border">?</p>
-            <p className="text-sm font-mono text-muted tracking-widest">NO RESULTS FOUND</p>
-            <button
-              onClick={() => { setSearchQuery(''); setActiveCategory('ALL'); }}
-              className="text-[10px] font-mono border border-accent text-accent px-4 py-2 hover:bg-accent hover:text-surface transition-all tracking-widest"
-            >
-              RESET
-            </button>
+            {/* Trending searches */}
+            <div className="flex flex-col items-center gap-4 w-full max-w-3xl">
+              <p className="text-[10px] font-mono text-muted tracking-[0.4em] self-start">
+                [ TRENDING SEARCHES ]
+              </p>
+              <div className="flex gap-3 flex-wrap">
+                {['iPhone 15', 'MacBook M3', 'S24 Ultra'].map(term => (
+                  <button
+                    key={term}
+                    onClick={() => setSearchQuery(term)}
+                    className="font-mono text-xs tracking-widest border border-gray-200 dark:border-border text-muted
+                               px-4 py-2 hover:border-[#0F1116] dark:hover:border-white hover:text-[#0F1116] dark:hover:text-white transition-all"
+                  >
+                    {term}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
         ) : (
-          <>
-            {/* Hero */}
-            {heroGroup && (
-              <HeroCard
-                group={heroGroup}
-                isCompared={compareIds.has(heroGroup.id)}
-                onToggleCompare={toggleCompare}
-              />
-            )}
+          /* ── RESULTS VIEW ───────────────────────────────────────── */
+          <div className="flex flex-col gap-8 py-8">
 
-            {/* Grid */}
-            {gridGroups.length > 0 && (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-px bg-border">
-                {gridGroups.map(group => (
-                  <ProductCard
-                    key={group.id}
-                    group={group}
-                    isCompared={compareIds.has(group.id)}
+            {/* Section header */}
+            <div className="flex items-start justify-between">
+              <div className="space-y-3">
+                <p className={`text-[10px] font-mono tracking-[0.3em] uppercase ${isDark ? 'text-muted' : 'text-[#0F1116]/70'}`}>
+                  {isSearching ? '[ SEARCHING… ]' : `[ RESULTS: "${searchQuery.toUpperCase()}" ]`}
+                </p>
+                <h2 className={`text-5xl font-black uppercase leading-none tracking-tight ${isDark ? 'text-white' : 'text-[#0F1116]'}`}>
+                  {searchQuery.toUpperCase()}
+                </h2>
+              </div>
+
+              <div className="hidden md:flex flex-col items-end gap-3">
+                <button className="text-xs font-mono text-[#0F1116] dark:text-white border border-[#0F1116] dark:border-white px-5 py-2 hover:bg-[#0F1116] dark:hover:bg-white hover:text-white dark:hover:text-surface transition-all tracking-[0.2em]">
+                  <span className="flex items-center gap-2">
+                    <SlidersHorizontal size={12} />
+                    FILTERS
+                  </span>
+                </button>
+                <p className={`text-[10px] font-mono tracking-widest ${isDark ? 'text-muted' : 'text-[#0F1116]/70'}`}>
+                  {isSearching ? 'LOADING…' : `${colorGroups.length} MODEL${colorGroups.length !== 1 ? 'S' : ''} FOUND`}
+                </p>
+              </div>
+            </div>
+
+            {/* Category chips */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {CATEGORY_CHIPS.map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => setActiveCategory(cat)}
+                  className={`text-[10px] font-mono tracking-[0.2em] px-3 py-1.5 border transition-all ${
+                    activeCategory === cat
+                      ? 'border-accent text-accent bg-accent/10'
+                      : 'border-gray-200 dark:border-border text-muted hover:border-[#0F1116] dark:hover:border-muted hover:text-[#0F1116] dark:hover:text-white'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+
+            {/* Content */}
+            <div className="flex gap-6 items-start">
+            <Sidebar
+              filters={filters}
+              onChange={setFilters}
+              onReset={() => setFilters(DEFAULT_FILTERS)}
+              isDark={isDark}
+            />
+            <div className="flex-1 min-w-0">
+            {isSearching ? (
+              <div className="flex flex-col items-center gap-4 py-32 text-center border border-gray-200 dark:border-border">
+                <style>{`
+                  @keyframes retro-fill {
+                    from { width: 0% }
+                    to   { width: 100% }
+                  }
+                  .retro-bar {
+                    animation: retro-fill 1.8s steps(12, end) infinite;
+                  }
+                `}</style>
+                <div className="w-64 h-5 border-2 border-[#0F1116] dark:border-white overflow-hidden bg-transparent">
+                  <div className="retro-bar h-full bg-[#0F1116] dark:bg-white" />
+                </div>
+                <p className="text-xs font-mono text-muted tracking-[0.2em]">SCANNING STORES...</p>
+              </div>
+
+            ) : colorGroups.length === 0 ? (
+              <div className="flex flex-col items-center gap-4 py-32 text-center border border-gray-200 dark:border-border">
+                <p className="text-5xl font-black text-gray-300 dark:text-border">?</p>
+                <p className="text-sm font-mono text-muted tracking-widest">NO RESULTS FOUND</p>
+                <button
+                  onClick={() => { setSearchQuery(''); setActiveCategory('ALL'); }}
+                  className="text-[10px] font-mono border border-accent text-accent px-4 py-2 hover:bg-accent hover:text-surface transition-all tracking-widest"
+                >
+                  RESET
+                </button>
+              </div>
+
+            ) : (
+              <>
+                {heroGroup && (
+                  <HeroCard
+                    group={heroGroup}
+                    isCompared={compareIds.has(heroGroup.id)}
                     onToggleCompare={toggleCompare}
                   />
-                ))}
-              </div>
+                )}
+                {gridGroups.length > 0 && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                    {gridGroups.map(group => (
+                      <ProductCard
+                        key={group.id}
+                        group={group}
+                        isCompared={compareIds.has(group.id)}
+                        onToggleCompare={toggleCompare}
+                      />
+                    ))}
+                  </div>
+                )}
+              </>
             )}
-          </>
+            </div>{/* flex-1 */}
+            </div>{/* flex gap-6 */}
+          </div>
         )}
       </main>
 

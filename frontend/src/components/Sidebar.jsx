@@ -1,23 +1,21 @@
 import { SlidersHorizontal, RotateCcw } from 'lucide-react';
 import { BRANDS, RAM_OPTIONS, STORAGE_OPTIONS, PRICE_MAX } from '../data/mockProducts';
-
-const brandColors = {
-  Apple:   'bg-gray-100 text-gray-700',
-  Samsung: 'bg-blue-50 text-blue-700',
-  Dell:    'bg-red-50 text-red-700',
-  HP:      'bg-sky-50 text-sky-700',
-  Lenovo:  'bg-rose-50 text-rose-700',
-  Xiaomi:  'bg-orange-50 text-orange-700',
-};
+import { SiApple, SiSamsung, SiDell, SiHp, SiLenovo, SiXiaomi } from '@icons-pack/react-simple-icons';
 
 const brandIcons = {
-  Apple:   '🍎',
-  Samsung: '📱',
-  Dell:    '💻',
-  HP:      '🖥️',
-  Lenovo:  '⌨️',
-  Xiaomi:  '⚡',
+  Apple:   SiApple,
+  Samsung: SiSamsung,
+  Dell:    SiDell,
+  HP:      SiHp,
+  Lenovo:  SiLenovo,
+  Xiaomi:  SiXiaomi,
 };
+
+function BrandIcon({ name, isDark }) {
+  const Icon = brandIcons[name];
+  if (!Icon) return null;
+  return <Icon size={14} color={isDark ? 'white' : '#0F1116'} style={{ flexShrink: 0 }} />;
+}
 
 function formatINR(v) {
   if (v >= 100000) return `₹${(v / 100000).toFixed(1)}L`;
@@ -28,7 +26,7 @@ function formatINR(v) {
 /**
  * Sidebar filter panel
  */
-export default function Sidebar({ filters, onChange, onReset }) {
+export default function Sidebar({ filters, onChange, onReset, isDark }) {
   const { priceRange, brands, rams, storages } = filters;
 
   function toggleArr(arr, val) {
@@ -36,10 +34,10 @@ export default function Sidebar({ filters, onChange, onReset }) {
   }
 
   return (
-    <aside className="glass rounded-3xl shadow-glass p-5 flex flex-col gap-6 h-fit sticky top-4">
+    <aside className="bg-paper dark:bg-card border border-gray-200 dark:border-border rounded-none p-5 flex flex-col gap-6 h-fit sticky top-20 w-64 flex-shrink-0">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-brand-700 font-bold text-base">
+        <div className="flex items-center gap-2 text-gray-800 dark:text-white font-bold text-base">
           <SlidersHorizontal size={16} />
           Filters
         </div>
@@ -54,22 +52,23 @@ export default function Sidebar({ filters, onChange, onReset }) {
 
       {/* ── Price Range ── */}
       <div>
-        <p className="text-xs font-bold text-gray-700 mb-3 uppercase tracking-wider">Price Range (₹)</p>
-        <div className="flex justify-between text-[11px] font-semibold text-brand-700 mb-2">
-          <span className="px-2 py-0.5 bg-brand-600 text-white rounded-full">{formatINR(priceRange[0])}</span>
-          <span className="px-2 py-0.5 bg-brand-600 text-white rounded-full">{formatINR(priceRange[1])}</span>
+        <p className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wider">Price Range (₹)</p>
+        <div className="flex justify-between text-[11px] font-semibold mb-2">
+          <span className="px-2 py-0.5 bg-gray-700 dark:bg-gray-600 text-white rounded-full">{formatINR(priceRange[0])}</span>
+          <span className="px-2 py-0.5 bg-gray-700 dark:bg-gray-600 text-white rounded-full">{formatINR(priceRange[1])}</span>
         </div>
 
         {/* Min thumb */}
         <div className="relative h-6 flex items-center">
+          <div className="absolute w-full h-1.5 rounded-full bg-gray-200 dark:bg-border" style={{ zIndex: 0 }} />
           <div
-            className="absolute h-1.5 rounded-full bg-brand-600"
+            className="absolute h-1.5 rounded-full bg-accent"
             style={{
               left: `${(priceRange[0] / PRICE_MAX) * 100}%`,
               right: `${100 - (priceRange[1] / PRICE_MAX) * 100}%`,
+              zIndex: 1,
             }}
           />
-          <div className="absolute w-full h-1.5 rounded-full bg-brand-100" style={{ zIndex: 0 }} />
           <input
             type="range"
             min={0}
@@ -100,7 +99,7 @@ export default function Sidebar({ filters, onChange, onReset }) {
 
       {/* ── Store ── */}
       <div>
-        <p className="text-xs font-bold text-gray-700 mb-3 uppercase tracking-wider">Store</p>
+        <p className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wider">Store</p>
         <div className="flex flex-col gap-2">
           {['Amazon', 'Flipkart'].map(store => {
             const active = filters.stores.includes(store);
@@ -108,18 +107,18 @@ export default function Sidebar({ filters, onChange, onReset }) {
               <button
                 key={store}
                 onClick={() => onChange({ ...filters, stores: toggleArr(filters.stores, store) })}
-                className={`flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium border transition-all duration-200 ${
+                className={`flex items-center gap-3 px-3 py-2 text-sm font-medium border transition-all duration-200 ${
                   active
-                    ? 'border-brand-400 bg-brand-50 text-brand-700'
-                    : 'border-gray-100 bg-white/60 text-gray-600 hover:border-brand-200'
+                    ? 'border-brand-500 bg-brand-600/10 text-brand-400'
+                    : 'border-border text-muted dark:text-gray-200 hover:border-brand-500/50 hover:text-brand-400'
                 }`}
               >
-                <span className="w-4 h-4 rounded flex items-center justify-center border-2 transition-colors duration-200 flex-shrink-0"
-                  style={{ borderColor: active ? '#7c3aed' : '#e5e7eb', background: active ? '#7c3aed' : 'white' }}
+                <span className="w-3.5 h-3.5 flex items-center justify-center border transition-colors duration-200 flex-shrink-0"
+                  style={{ borderColor: active ? '#7c3aed' : '#3a3d4a', background: active ? '#7c3aed' : 'transparent' }}
                 >
-                  {active && <span className="text-white text-[9px] font-black">✓</span>}
+                  {active && <span className="text-white text-[8px] font-black">✓</span>}
                 </span>
-                {store === 'Amazon' ? '🛒 Amazon India' : '🛍️ Flipkart'}
+                {store === 'Amazon' ? 'Amazon India' : 'Flipkart'}
               </button>
             );
           })}
@@ -128,7 +127,7 @@ export default function Sidebar({ filters, onChange, onReset }) {
 
       {/* ── Brands ── */}
       <div>
-        <p className="text-xs font-bold text-gray-700 mb-3 uppercase tracking-wider">Brand</p>
+        <p className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wider">Brand</p>
         <div className="flex flex-col gap-2">
           {BRANDS.map(brand => {
             const active = brands.includes(brand);
@@ -136,18 +135,18 @@ export default function Sidebar({ filters, onChange, onReset }) {
               <button
                 key={brand}
                 onClick={() => onChange({ ...filters, brands: toggleArr(brands, brand) })}
-                className={`flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium border transition-all duration-200 ${
+                className={`flex items-center gap-3 px-3 py-2 text-sm font-medium border transition-all duration-200 ${
                   active
-                    ? 'border-brand-400 bg-brand-50 text-brand-700'
-                    : 'border-gray-100 bg-white/60 text-gray-600 hover:border-brand-200'
+                    ? 'border-brand-500 bg-brand-600/10 text-brand-400'
+                    : 'border-border text-muted dark:text-gray-200 hover:border-brand-500/50 hover:text-brand-400'
                 }`}
               >
-                <span className="w-4 h-4 rounded flex items-center justify-center border-2 transition-colors duration-200 flex-shrink-0"
-                  style={{ borderColor: active ? '#7c3aed' : '#e5e7eb', background: active ? '#7c3aed' : 'white' }}
+                <span className="w-3.5 h-3.5 flex items-center justify-center border transition-colors duration-200 flex-shrink-0"
+                  style={{ borderColor: active ? '#7c3aed' : '#3a3d4a', background: active ? '#7c3aed' : 'transparent' }}
                 >
-                  {active && <span className="text-white text-[9px] font-black">✓</span>}
+                  {active && <span className="text-white text-[8px] font-black">✓</span>}
                 </span>
-                <span className="text-base">{brandIcons[brand]}</span>
+                {brandIcons[brand] && <BrandIcon name={brand} isDark={isDark} />}
                 <span>{brand}</span>
               </button>
             );
@@ -157,16 +156,16 @@ export default function Sidebar({ filters, onChange, onReset }) {
 
       {/* ── RAM ── */}
       <div>
-        <p className="text-xs font-bold text-gray-700 mb-3 uppercase tracking-wider">RAM</p>
+        <p className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wider">RAM</p>
         <div className="flex flex-wrap gap-2">
           {RAM_OPTIONS.map(opt => (
             <button
               key={opt}
               onClick={() => onChange({ ...filters, rams: toggleArr(rams, opt) })}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all duration-200 ${
+              className={`px-3 py-1.5 text-xs font-mono tracking-wider border transition-all duration-200 ${
                 rams.includes(opt)
-                  ? 'bg-brand-600 text-white border-brand-600 shadow-sm'
-                  : 'border-gray-200 text-gray-600 bg-white/70 hover:border-brand-300 hover:text-brand-600'
+                  ? 'bg-brand-600/20 text-brand-400 border-brand-500'
+                  : 'border-border text-muted dark:text-gray-200 hover:border-brand-500/50 hover:text-brand-400'
               }`}
             >
               {opt}
@@ -177,16 +176,16 @@ export default function Sidebar({ filters, onChange, onReset }) {
 
       {/* ── Storage ── */}
       <div>
-        <p className="text-xs font-bold text-gray-700 mb-3 uppercase tracking-wider">Storage</p>
+        <p className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wider">Storage</p>
         <div className="flex flex-wrap gap-2">
           {STORAGE_OPTIONS.map(opt => (
             <button
               key={opt}
               onClick={() => onChange({ ...filters, storages: toggleArr(storages, opt) })}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all duration-200 ${
+              className={`px-3 py-1.5 text-xs font-mono tracking-wider border transition-all duration-200 ${
                 storages.includes(opt)
-                  ? 'bg-brand-600 text-white border-brand-600 shadow-sm'
-                  : 'border-gray-200 text-gray-600 bg-white/70 hover:border-brand-300 hover:text-brand-600'
+                  ? 'bg-brand-600/20 text-brand-400 border-brand-500'
+                  : 'border-border text-muted dark:text-gray-200 hover:border-brand-500/50 hover:text-brand-400'
               }`}
             >
               {opt}

@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@icons-pack/react-simple-icons": "^13.13.0",
+    "tech-stack-icons": "^3.7.1"
+  }
+}

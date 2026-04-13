@@ -1,3 +1,5 @@
 scrapling
 fastapi
 uvicorn[standard]
+curl_cffi
+scrapling[all]
