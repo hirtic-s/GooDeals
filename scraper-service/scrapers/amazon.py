@@ -55,7 +55,6 @@ def scrape(query: str, max_results: int = 25) -> list[dict]:
             ua = _USER_AGENTS[(attempt - 1) % len(_USER_AGENTS)]
             page = Fetcher().get(
                 url,
-                stealthy_headers=True,
                 follow_redirects=True,
                 headers={"User-Agent": ua},
             )

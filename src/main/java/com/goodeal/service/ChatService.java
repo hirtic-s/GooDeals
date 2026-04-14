@@ -13,6 +13,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
@@ -174,8 +176,33 @@ public class ChatService {
         }
     }
 
+    /**
+     * LRU response cache — keyed on the normalized user message.
+     *
+     * The free-tier quota is only 20 requests/day, so avoiding duplicate Gemini
+     * calls for the same question is far more effective than retrying on 429s
+     * (retries just burn more of the tiny daily allowance).
+     * Capacity of 50 covers a full day of varied queries with room to spare.
+     */
+    private final Map<String, String> geminiCache = Collections.synchronizedMap(
+            new LinkedHashMap<>(64, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, String> eldest) {
+                    return size() > 50;
+                }
+            }
+    );
+
     @SuppressWarnings("unchecked")
     private String callGemini(String userPrompt) {
+        // Normalize the prompt to maximize cache hits across minor phrasing differences
+        String cacheKey = userPrompt.toLowerCase().trim().replaceAll("\\s+", " ");
+        String cached = geminiCache.get(cacheKey);
+        if (cached != null) {
+            log.info("Gemini cache hit — serving stored response (quota saved)");
+            return cached;
+        }
+
         Map<String, Object> body = Map.of(
                 "systemInstruction", Map.of(
                         "parts", List.of(Map.of("text", SYSTEM_PROMPT))
@@ -190,7 +217,8 @@ public class ChatService {
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
 
         try {
-            ResponseEntity<?> response = restTemplate.postForEntity(GEMINI_BASE_URL + geminiApiKey, entity, Map.class);
+            ResponseEntity<?> response = restTemplate.postForEntity(
+                    GEMINI_BASE_URL + geminiApiKey, entity, Map.class);
             Map<String, Object> responseBody = (Map<String, Object>) response.getBody();
             if (responseBody == null) return fallback();
 
@@ -201,13 +229,17 @@ public class ChatService {
             Map<String, Object> content = (Map<String, Object>) candidates.get(0).get("content");
             List<Map<String, Object>> parts = (List<Map<String, Object>>) content.get("parts");
             String text = (String) parts.get(0).get("text");
-            return text != null ? text.trim() : fallback();
+            if (text == null) return fallback();
+
+            String result = text.trim();
+            geminiCache.put(cacheKey, result);
+            return result;
 
         } catch (HttpClientErrorException.TooManyRequests e) {
-            log.warn("Gemini API rate-limited (429) — returning quota message to user");
-            return "{\"reply\":\"GooBot's AI is catching its breath — Gemini hit its request limit. "
-                    + "The live results grid below still has fresh prices for you though! "
-                    + "Try asking again in a moment.\",\"action\":null}";
+            log.warn("Gemini 429 — daily/per-minute quota exhausted, no retries (would burn more quota)");
+            return "{\"reply\":\"GooBot's AI quota is maxed out for now — only 20 chats per day on the free tier. "
+                    + "The live results grid below still has fresh prices! "
+                    + "Quota resets at midnight Pacific time.\",\"action\":null}";
         } catch (Exception e) {
             log.error("Gemini API call failed: {}", e.getMessage(), e);
             return fallback();

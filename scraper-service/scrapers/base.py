@@ -3,11 +3,20 @@ from typing import Optional
 
 # Conversational filler words that must not be treated as product keywords
 STOP_WORDS = {
-    "suggest", "me", "find", "show", "get", "a", "an", "the",
-    "best", "good", "top", "give", "search", "look", "recommend",
-    "some", "any", "please", "need", "want", "buy", "for", "of",
-    "with", "what", "is", "are", "can", "you", "i", "my", "help",
-    "under", "than",
+    # Conversational filler
+    "suggest", "me", "find", "show", "get", "give", "search", "look",
+    "recommend", "please", "need", "want", "buy", "help",
+    # Articles / determiners
+    "a", "an", "the", "some", "any",
+    # Conjunctions
+    "or", "and", "but", "nor",
+    # Prepositions / qualifiers
+    "with", "for", "of", "in", "on", "at", "to", "by", "up",
+    "under", "than", "about", "like",
+    # Pronouns / modals
+    "what", "is", "are", "can", "you", "i", "my",
+    # Vague adjectives that add no product signal
+    "best", "good", "top",
 }
 
 ACCESSORY_KEYWORDS = {
@@ -81,10 +90,17 @@ def clean_name(title: str, brand: str = "") -> str:
 
 def clean_query(query: str) -> str:
     """
-    Removes conversational stop words so that filler phrases like
-    "suggest me iphone" reduce to "iphone" before keyword matching.
+    Removes conversational stop words and bare price numbers so that a phrase
+    like "suggest me iphone 15 under 70000" reduces to "iphone 15".
+
+    Pure-digit tokens with 4+ digits (e.g. 70000, 40000) are treated as prices
+    and stripped — they never appear in product titles and break relevance checks.
+    Short numeric tokens like "15" or "24" (model numbers) are kept.
     """
-    words = [w for w in query.lower().split() if w not in STOP_WORDS]
+    words = [
+        w for w in query.lower().split()
+        if w not in STOP_WORDS and not re.fullmatch(r"\d{4,}", w)
+    ]
     return " ".join(words)
 
 

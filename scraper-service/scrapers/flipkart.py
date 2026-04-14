@@ -2,8 +2,8 @@ import time
 import random
 import logging
 from typing import Optional
-from scrapling.fetchers import StealthyFetcher, Fetcher
-from .base import parse_price, extract_brand, is_relevant, clean_name
+from scrapling.fetchers import Fetcher
+from .base import parse_price, extract_brand, is_relevant, clean_name, clean_query
 
 log = logging.getLogger(__name__)
 
@@ -23,18 +23,16 @@ _RETRY_DELAYS = [2, 5, 10]
 
 
 def scrape(query: str, max_results: int = 25) -> list[dict]:
-    url = BASE_URL + query.replace(" ", "+")
+    search_term = clean_query(query) or query
+    url = BASE_URL + search_term.replace(" ", "+")
     log.info("[Flipkart] Scraping: %s", url)
 
     cards = []
     for attempt, delay in enumerate([0] + _RETRY_DELAYS, start=1):
         if delay:
-            time.sleep(delay * random.uniform(0.5, 1.5))
+            time.sleep(delay * random.uniform(1.5, 3.0))
         try:
-            try:
-                page = StealthyFetcher.fetch(url, headless=True, follow_redirects=True)
-            except Exception:
-                page = Fetcher().get(url, stealthy_headers=True, follow_redirects=True)
+            page = Fetcher().get(url, follow_redirects=True)
             for sel in _CARD_SELECTORS:
                 cards = page.css(sel)
                 if cards:
@@ -55,7 +53,7 @@ def scrape(query: str, max_results: int = 25) -> list[dict]:
         if len(results) >= max_results:
             break
         try:
-            item = _parse_card(card, query)
+            item = _parse_card(card, search_term)
             if item:
                 results.append(item)
         except Exception as exc:
