@@ -10,7 +10,7 @@ const INITIAL_MESSAGES = [
   },
 ];
 
-export default function ChatBubble() {
+export default function ChatBubble({ onExecuteSearch }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState(INITIAL_MESSAGES);
   const [input, setInput] = useState('');
@@ -38,6 +38,23 @@ export default function ChatBubble() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setMessages(prev => [...prev, { role: 'assistant', text: data.reply }]);
+
+      const action = data.action;
+      if (action?.type === 'SEARCH' && action.query && onExecuteSearch) {
+        const priceLimit = action.filters?.priceRange?.[1];
+        const budgetText =
+          priceLimit != null && priceLimit < 10_000_000
+            ? ` under ₹${Number(priceLimit).toLocaleString('en-IN')}`
+            : '';
+        setMessages(prev => [
+          ...prev,
+          {
+            role: 'system',
+            text: `[ Scanning for "${action.query}"${budgetText} now... ]`,
+          },
+        ]);
+        onExecuteSearch({ query: action.query, filters: action.filters });
+      }
     } catch {
       setMessages(prev => [
         ...prev,
@@ -92,7 +109,9 @@ export default function ChatBubble() {
                   className={`max-w-[82%] px-3 py-2 font-mono text-[11px] leading-relaxed tracking-wide whitespace-pre-wrap
                     ${msg.role === 'user'
                       ? 'bg-white text-surface'
-                      : 'bg-white/5 border border-white/10 text-white'
+                      : msg.role === 'system'
+                        ? 'text-accent border border-accent/30 bg-accent/5'
+                        : 'bg-white/5 border border-white/10 text-white'
                     }`}
                 >
                   {msg.text}

@@ -3,8 +3,8 @@ import time
 import random
 import logging
 from typing import Optional
-from scrapling.fetchers import StealthyFetcher, Fetcher
-from .base import parse_price, extract_brand, is_relevant, clean_name
+from scrapling.fetchers import Fetcher
+from .base import parse_price, extract_brand, is_relevant, clean_name, clean_query
 
 log = logging.getLogger(__name__)
 
@@ -32,22 +32,33 @@ _PRICE_SELECTORS = [
 _MAX_RETRIES = 3
 _RETRY_DELAYS = [2, 5, 10]   # seconds between retries
 
+# Real Chrome UA strings rotated per attempt to reduce 503 fingerprinting
+_USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0",
+]
+
 
 def scrape(query: str, max_results: int = 25) -> list[dict]:
-    url = BASE_URL + query.replace(" ", "+")
+    # Strip conversational filler before building the search URL
+    search_term = clean_query(query) or query
+    url = BASE_URL + search_term.replace(" ", "+")
     log.info("[Amazon] Scraping: %s", url)
 
     page = None
     for attempt, delay in enumerate([0] + _RETRY_DELAYS, start=1):
         if delay:
-            time.sleep(delay * random.uniform(0.5, 1.5))
+            time.sleep(delay * random.uniform(1.5, 3.0))
         try:
-            # StealthyFetcher uses a real browser (Camoufox) to bypass Amazon bot detection.
-            # Falls back to plain Fetcher if Camoufox is unavailable.
-            try:
-                page = StealthyFetcher.fetch(url, headless=True, follow_redirects=True)
-            except Exception:
-                page = Fetcher().get(url, stealthy_headers=True, follow_redirects=True)
+            ua = _USER_AGENTS[(attempt - 1) % len(_USER_AGENTS)]
+            page = Fetcher().get(
+                url,
+                stealthy_headers=True,
+                follow_redirects=True,
+                headers={"User-Agent": ua},
+            )
             if page.css("div[data-component-type=s-search-result]"):
                 break
             log.warning("[Amazon] No product cards on attempt %d (possible block), retrying…", attempt)
@@ -68,7 +79,7 @@ def scrape(query: str, max_results: int = 25) -> list[dict]:
         if len(results) >= max_results:
             break
         try:
-            item = _parse_card(card, query)
+            item = _parse_card(card, search_term)
             if item:
                 results.append(item)
         except Exception as exc:

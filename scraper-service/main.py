@@ -7,6 +7,7 @@ Run with: uvicorn main:app --port 8000
 import logging
 from fastapi import FastAPI, Query, HTTPException
 from scrapers import amazon, flipkart
+from scrapers.base import clean_query
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(name)s — %(message)s")
 
@@ -28,8 +29,11 @@ def scrape(
     if not scrape_fn:
         raise HTTPException(status_code=400, detail=f"Unknown store '{store}'. Use: amazon, flipkart")
 
-    results = scrape_fn(query.strip(), max_results)
-    return {"store": store, "query": query, "totalResults": len(results), "results": results}
+    # Remove conversational filler ("suggest me", "find", etc.) before scraping
+    raw_query = query.strip()
+    cleaned = clean_query(raw_query) or raw_query
+    results = scrape_fn(cleaned, max_results)
+    return {"store": store, "query": cleaned, "totalResults": len(results), "results": results}
 
 
 @app.get("/health")

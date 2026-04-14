@@ -1,11 +1,16 @@
 package com.goodeal.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.goodeal.dto.ChatAction;
 import com.goodeal.dto.ChatResponse;
 import com.goodeal.dto.SearchResponseDto;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
@@ -31,20 +36,40 @@ public class ChatService {
 
     private static final Logger log = LoggerFactory.getLogger(ChatService.class);
 
-    private static final String GEMINI_URL =
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
-            + "?key=AIzaSyDjCWpspD16U3o1jhzAOGFjCO2yGkvvMyY";
+    private static final String GEMINI_BASE_URL =
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=";
+
+    @Value("${goodeal.gemini.api-key}")
+    private String geminiApiKey;
 
     private static final String SYSTEM_PROMPT =
             "You are GooBot — a witty, sharp, and slightly cheeky shopping assistant for GooDeals, "
             + "India's coolest real-time price comparison platform. "
-            + "You will receive a user query and live price data from Amazon and Flipkart. "
-            + "Give an opinionated, confident recommendation with the product name, best price in ₹, "
-            + "and a punchy one-liner verdict. "
-            + "Keep it under 4 sentences. No markdown headers or bullet walls. Just conversational genius.";
+            + "You will receive a user query and live price data from Amazon and Flipkart.\n\n"
+            + "ALWAYS respond with a raw JSON object — no markdown fences, no extra text outside the JSON:\n"
+            + "{\n"
+            + "  \"reply\": \"Your conversational recommendation (max 4 sentences, no markdown headers or bullets)\",\n"
+            + "  \"action\": {\n"
+            + "    \"type\": \"SEARCH\",\n"
+            + "    \"query\": \"product search term\",\n"
+            + "    \"filters\": {\n"
+            + "      \"priceRange\": [0, 80000],\n"
+            + "      \"brands\": []\n"
+            + "    }\n"
+            + "  }\n"
+            + "}\n\n"
+            + "Rules:\n"
+            + "- Set \"action\" to null when the user is NOT asking to find or buy a product (e.g. just chatting).\n"
+            + "- When the user IS searching for a product, populate \"action\":\n"
+            + "  - \"query\": the core product search term (e.g. \"iPhone 15 Pro\", \"gaming laptop\")\n"
+            + "  - \"filters.priceRange\": [minPrice, maxPrice] in ₹; use [0, 10000000] if no budget is mentioned\n"
+            + "  - \"filters.brands\": brand names if the user specified any, otherwise []\n"
+            + "- Be opinionated, India-market-aware, and keep the reply under 4 sentences.\n"
+            + "- The reply should confirm the action being taken (e.g. 'Scanning for iPhones under ₹80,000 now...').";
 
     private final SearchService searchService;
     private final RestTemplate restTemplate = new RestTemplate();
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public ChatService(SearchService searchService) {
         this.searchService = searchService;
@@ -61,13 +86,63 @@ public class ChatService {
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
             var future = executor.submit(() -> {
                 String context = fetchPriceContext(userMessage);
+
+                // No results means the scraper found nothing — skip Gemini entirely
+                // to conserve API quota and give the user actionable advice instead.
+                if (context == null) {
+                    return new ChatResponse(
+                            "I found the products, but my filters were a bit too picky. "
+                            + "Try searching for just the model name — something like "
+                            + "\"iPhone 15 128GB\" — without the extra words!");
+                }
+
                 String fullPrompt = "User query: " + userMessage + "\n\nLive price data:\n" + context;
-                return callGemini(fullPrompt);
+                String rawText = callGemini(fullPrompt);
+                return parseGeminiText(rawText);
             });
-            return new ChatResponse(future.get());
+            return future.get();
         } catch (Exception e) {
             log.error("Chat processing failed: {}", e.getMessage(), e);
             return new ChatResponse("Oops! GooBot had a brain freeze. Try again in a sec!");
+        }
+    }
+
+    /**
+     * Parses the raw text from Gemini into a {@link ChatResponse}.
+     * Gemini is instructed to return JSON; this method handles the happy path
+     * and falls back gracefully if the model returns plain text instead.
+     */
+    private ChatResponse parseGeminiText(String rawText) {
+        if (rawText == null || rawText.isBlank()) {
+            return new ChatResponse(fallback());
+        }
+        try {
+            // Strip optional ```json ... ``` fences that the model sometimes adds
+            String cleaned = rawText.trim();
+            if (cleaned.startsWith("```")) {
+                cleaned = cleaned
+                        .replaceAll("(?s)^```(?:json)?\\s*", "")
+                        .replaceAll("\\s*```$", "")
+                        .trim();
+            }
+
+            JsonNode root = objectMapper.readTree(cleaned);
+            String reply = root.path("reply").asText(fallback());
+
+            JsonNode actionNode = root.path("action");
+            ChatAction action = null;
+            if (actionNode.isObject()) {
+                action = objectMapper.treeToValue(actionNode, ChatAction.class);
+                // Discard action if essential fields are missing
+                if (action.query() == null || action.query().isBlank()) {
+                    action = null;
+                }
+            }
+            return new ChatResponse(reply, action);
+
+        } catch (Exception e) {
+            log.warn("Could not parse Gemini response as JSON, using raw text. Error: {}", e.getMessage());
+            return new ChatResponse(rawText.trim());
         }
     }
 
@@ -75,11 +150,18 @@ public class ChatService {
     // Private helpers
     // -----------------------------------------------------------------------
 
+    /**
+     * Fetches live price data and formats it as a context string for Gemini.
+     *
+     * @return formatted price context, or {@code null} if the search returned no results
+     *         (signals the caller to skip the Gemini call entirely)
+     */
     private String fetchPriceContext(String query) {
         try {
             SearchResponseDto results = searchService.search(query);
             if (results.results().isEmpty()) {
-                return "No live price data found for this query.";
+                log.info("No scraper results for '{}' — skipping Gemini call", query);
+                return null;
             }
             return results.results().stream()
                     .limit(10)
@@ -108,7 +190,7 @@ public class ChatService {
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
 
         try {
-            ResponseEntity<?> response = restTemplate.postForEntity(GEMINI_URL, entity, Map.class);
+            ResponseEntity<?> response = restTemplate.postForEntity(GEMINI_BASE_URL + geminiApiKey, entity, Map.class);
             Map<String, Object> responseBody = (Map<String, Object>) response.getBody();
             if (responseBody == null) return fallback();
 
@@ -121,6 +203,11 @@ public class ChatService {
             String text = (String) parts.get(0).get("text");
             return text != null ? text.trim() : fallback();
 
+        } catch (HttpClientErrorException.TooManyRequests e) {
+            log.warn("Gemini API rate-limited (429) — returning quota message to user");
+            return "{\"reply\":\"GooBot's AI is catching its breath — Gemini hit its request limit. "
+                    + "The live results grid below still has fresh prices for you though! "
+                    + "Try asking again in a moment.\",\"action\":null}";
         } catch (Exception e) {
             log.error("Gemini API call failed: {}", e.getMessage(), e);
             return fallback();

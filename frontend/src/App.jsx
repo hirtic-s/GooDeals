@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import Navbar from './components/Navbar';
 import ProductCard, { HeroCard } from './components/ProductCard';
 import CompareTray from './components/CompareTray';
@@ -155,6 +155,9 @@ export default function App() {
   const [isSearching, setIsSearching] = useState(false);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
 
+  // Holds AI-supplied filter overrides that survive the useEffect filter reset
+  const pendingChatFiltersRef = useRef(null);
+
   // Called when the user explicitly submits (Enter / search button)
   function handleSearch() {
     const q = searchQuery.trim();
@@ -172,6 +175,12 @@ export default function App() {
   function handleClear() {
     setSearchQuery('');
     setSubmittedQuery('');
+  }
+
+  // Called by ChatBubble when the AI issues a SEARCH action
+  function handleChatSearch({ query, filters: chatFilters }) {
+    pendingChatFiltersRef.current = chatFilters || null;
+    handleSearchWith(query);
   }
 
   useEffect(() => {
@@ -197,7 +206,19 @@ export default function App() {
         if (!cancelled) {
           const mapped = (data.results || []).map(mapApiResult);
           const maxPrice = mapped.reduce((m, p) => Math.max(m, p.currentPrice || 0), PRICE_MAX);
-          setFilters(f => ({ ...f, priceRange: [f.priceRange[0], maxPrice] }));
+
+          // Apply AI-supplied filters from chat, falling back to computed defaults
+          const chatFilters = pendingChatFiltersRef.current;
+          pendingChatFiltersRef.current = null;
+          setFilters({
+            ...DEFAULT_FILTERS,
+            priceRange: [
+              chatFilters?.priceRange?.[0] ?? 0,
+              chatFilters?.priceRange?.[1] != null ? chatFilters.priceRange[1] : maxPrice,
+            ],
+            brands: chatFilters?.brands?.length ? chatFilters.brands : [],
+          });
+
           setSearchResults(mapped);
         }
       } catch (e) {
@@ -473,7 +494,7 @@ export default function App() {
 
       {compareIds.size > 0 && <div className="h-52" />}
 
-      <ChatBubble />
+      <ChatBubble onExecuteSearch={handleChatSearch} />
     </div>
   );
 }

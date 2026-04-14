@@ -1,6 +1,15 @@
 import re
 from typing import Optional
 
+# Conversational filler words that must not be treated as product keywords
+STOP_WORDS = {
+    "suggest", "me", "find", "show", "get", "a", "an", "the",
+    "best", "good", "top", "give", "search", "look", "recommend",
+    "some", "any", "please", "need", "want", "buy", "for", "of",
+    "with", "what", "is", "are", "can", "you", "i", "my", "help",
+    "under", "than",
+}
+
 ACCESSORY_KEYWORDS = {
     "charger", "cable", "adapter", "case", "cover", "protector",
     "sleeve", "stand", "dock", "hub", "holder", "pouch", "skin",
@@ -70,11 +79,35 @@ def clean_name(title: str, brand: str = "") -> str:
     return title
 
 
+def clean_query(query: str) -> str:
+    """
+    Removes conversational stop words so that filler phrases like
+    "suggest me iphone" reduce to "iphone" before keyword matching.
+    """
+    words = [w for w in query.lower().split() if w not in STOP_WORDS]
+    return " ".join(words)
+
+
+def normalize(text: str) -> str:
+    """Lowercase and strip all non-alphanumeric characters.
+
+    Allows token matching across punctuation and spacing variants, e.g.
+    ``"128GB"`` matches ``"128 GB"`` and ``"Wi-Fi"`` matches ``"wifi"``.
+    """
+    return re.sub(r"[^a-z0-9]", "", text.lower())
+
+
 def is_relevant(title: str, query: str) -> bool:
     """
     Returns True only when:
       1. The title contains no accessory keywords.
-      2. Every query word (len >= 2) appears in the title.
+      2. At least 80% of the meaningful cleaned query words appear in the
+         normalized title (punctuation and spaces stripped before comparison).
+
+    Normalizing both sides before matching means storage tokens like "128GB"
+    match listings written as "128 GB", and hyphenated words don't cause
+    false misses. The 0.8 threshold is strict enough to block unrelated
+    products while forgiving a single incidental mismatch in longer queries.
     """
     if not title or not query:
         return False
@@ -82,7 +115,9 @@ def is_relevant(title: str, query: str) -> bool:
     for kw in ACCESSORY_KEYWORDS:
         if kw in lower_title:
             return False
-    for word in query.lower().split():
-        if len(word) >= 2 and word not in lower_title:
-            return False
-    return True
+    target_words = [w for w in clean_query(query).split() if len(w) >= 2]
+    if not target_words:
+        return True
+    norm_title = normalize(title)
+    matches = sum(1 for w in target_words if normalize(w) in norm_title)
+    return (matches / len(target_words)) >= 0.8
