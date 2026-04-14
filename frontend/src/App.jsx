@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Navbar from './components/Navbar';
 import ProductCard, { HeroCard } from './components/ProductCard';
 import CompareTray from './components/CompareTray';
@@ -148,46 +148,69 @@ const CATEGORY_CHIPS = ['ALL', 'MOBILES', 'LAPTOPS', 'TABLETS', 'WEARABLES'];
 export default function App() {
   const [isDark, setIsDark] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [submittedQuery, setSubmittedQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('ALL');
   const [compareIds, setCompareIds] = useState(new Set());
   const [searchResults, setSearchResults] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
-  const debounceRef = useRef(null);
+
+  // Called when the user explicitly submits (Enter / search button)
+  function handleSearch() {
+    const q = searchQuery.trim();
+    if (q) setSubmittedQuery(q);
+  }
+
+  // Used by nav links and trending chips — sets input AND submits immediately
+  function handleSearchWith(val) {
+    const q = val.trim();
+    setSearchQuery(q);
+    if (q) setSubmittedQuery(q);
+  }
+
+  // Clears everything and returns to home view
+  function handleClear() {
+    setSearchQuery('');
+    setSubmittedQuery('');
+  }
 
   useEffect(() => {
-    if (!searchQuery.trim()) {
+    if (!submittedQuery) {
       setSearchResults(null);
       setIsSearching(false);
       setFilters(DEFAULT_FILTERS);
       setActiveCategory('ALL');
       return;
     }
-    clearTimeout(debounceRef.current);
     setIsSearching(true);
     setSearchResults(null);
     setFilters(DEFAULT_FILTERS);
     setActiveCategory('ALL');
-    debounceRef.current = setTimeout(async () => {
+    let cancelled = false;
+    (async () => {
       try {
         const res = await fetch(
-          `${import.meta.env.VITE_API_URL}/api/v1/search?query=${encodeURIComponent(searchQuery.trim())}`
+          `${import.meta.env.VITE_API_URL}/api/v1/search?query=${encodeURIComponent(submittedQuery)}`
         );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        const mapped = (data.results || []).map(mapApiResult);
-        const maxPrice = mapped.reduce((m, p) => Math.max(m, p.currentPrice || 0), PRICE_MAX);
-        setFilters(f => ({ ...f, priceRange: [f.priceRange[0], maxPrice] }));
-        setSearchResults(mapped);
+        if (!cancelled) {
+          const mapped = (data.results || []).map(mapApiResult);
+          const maxPrice = mapped.reduce((m, p) => Math.max(m, p.currentPrice || 0), PRICE_MAX);
+          setFilters(f => ({ ...f, priceRange: [f.priceRange[0], maxPrice] }));
+          setSearchResults(mapped);
+        }
       } catch (e) {
-        console.error('Search failed', e);
-        setSearchResults([]);
+        if (!cancelled) {
+          console.error('Search failed', e);
+          setSearchResults([]);
+        }
       } finally {
-        setIsSearching(false);
+        if (!cancelled) setIsSearching(false);
       }
-    }, 800);
-    return () => clearTimeout(debounceRef.current);
-  }, [searchQuery]);
+    })();
+    return () => { cancelled = true; };
+  }, [submittedQuery]);
 
   const baseProducts = searchResults !== null ? searchResults : MOCK_PRODUCTS;
 
@@ -259,11 +282,19 @@ export default function App() {
   const heroGroup = colorGroups[0] ?? null;
   const gridGroups = colorGroups.slice(1);
 
-  const isHomeView = !searchQuery;
+  const isHomeView = !submittedQuery;
 
   return (
     <div className={`${isDark ? 'dark bg-surface' : 'bg-paper'} min-h-screen`}>
-      <Navbar searchQuery={searchQuery} onSearchChange={setSearchQuery} hideSearch={isHomeView} isDark={isDark} toggleTheme={() => setIsDark(d => !d)} />
+      <Navbar
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        onSearch={(val) => val ? handleSearchWith(val) : handleSearch()}
+        onClear={handleClear}
+        hideSearch={isHomeView}
+        isDark={isDark}
+        toggleTheme={() => setIsDark(d => !d)}
+      />
 
       <main className="max-w-[1400px] mx-auto px-6 flex flex-col gap-8">
 
@@ -271,17 +302,28 @@ export default function App() {
           /* ── HOME VIEW ──────────────────────────────────────────── */
           <div className="flex flex-col items-center justify-center min-h-[80vh] gap-8">
             {/* Giant search input */}
-            <div className="w-full max-w-3xl border-b-2 border-[#0F1116] dark:border-white">
+            <div className="w-full max-w-3xl border-b-2 border-[#0F1116] dark:border-white flex items-center gap-4">
               <input
                 type="text"
                 placeholder="SEARCH STORES..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSearch()}
                 autoFocus
-                className="w-full bg-transparent text-[#0F1116] dark:text-white text-6xl font-mono font-black
+                className="flex-1 bg-transparent text-[#0F1116] dark:text-white text-6xl font-mono font-black
                            placeholder:text-muted caret-accent
                            focus:outline-none py-4 tracking-tight"
               />
+              <button
+                onClick={handleSearch}
+                disabled={!searchQuery.trim()}
+                className="flex-shrink-0 px-6 py-3 bg-[#0F1116] dark:bg-white text-white dark:text-[#0F1116]
+                           font-mono text-xs font-bold tracking-[0.2em] uppercase
+                           disabled:opacity-30 disabled:cursor-not-allowed
+                           hover:bg-accent dark:hover:bg-accent hover:text-white transition-colors"
+              >
+                SEARCH
+              </button>
             </div>
 
             {/* Trending searches */}
@@ -293,7 +335,7 @@ export default function App() {
                 {['iPhone 15', 'MacBook M3', 'S24 Ultra'].map(term => (
                   <button
                     key={term}
-                    onClick={() => setSearchQuery(term)}
+                    onClick={() => handleSearchWith(term)}
                     className="font-mono text-xs tracking-widest border border-gray-200 dark:border-border text-muted
                                px-4 py-2 hover:border-[#0F1116] dark:hover:border-white hover:text-[#0F1116] dark:hover:text-white transition-all"
                   >
@@ -312,10 +354,10 @@ export default function App() {
             <div className="flex items-start justify-between">
               <div className="space-y-3">
                 <p className={`text-[10px] font-mono tracking-[0.3em] uppercase ${isDark ? 'text-muted' : 'text-[#0F1116]/70'}`}>
-                  {isSearching ? '[ SEARCHING… ]' : `[ RESULTS: "${searchQuery.toUpperCase()}" ]`}
+                  {isSearching ? '[ SEARCHING… ]' : `[ RESULTS: "${submittedQuery.toUpperCase()}" ]`}
                 </p>
                 <h2 className={`text-5xl font-black uppercase leading-none tracking-tight ${isDark ? 'text-white' : 'text-[#0F1116]'}`}>
-                  {searchQuery.toUpperCase()}
+                  {submittedQuery.toUpperCase()}
                 </h2>
               </div>
 

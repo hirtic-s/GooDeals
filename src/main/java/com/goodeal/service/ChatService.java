@@ -33,7 +33,7 @@ public class ChatService {
 
     private static final String GEMINI_URL =
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
-            + "?key=AIzaSyDHf1CIr15_JRn3TYWyuEEuXyLwWHNu0dU";
+            + "?key=AIzaSyDjCWpspD16U3o1jhzAOGFjCO2yGkvvMyY";
 
     private static final String SYSTEM_PROMPT =
             "You are GooBot — a witty, sharp, and slightly cheeky shopping assistant for GooDeals, "

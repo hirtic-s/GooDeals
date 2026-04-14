@@ -2,7 +2,7 @@ import { Search, X, Sun, Moon } from 'lucide-react';
 
 const NAV_LINKS = ['MOBILES', 'LAPTOPS', 'TABLETS'];
 
-export default function Navbar({ searchQuery, onSearchChange, hideSearch = false, isDark, toggleTheme }) {
+export default function Navbar({ searchQuery, onSearchChange, onSearch, onClear, hideSearch = false, isDark, toggleTheme }) {
   return (
     <header className="sticky top-0 z-50 bg-white/95 dark:bg-[#0f1116]/95 backdrop-blur-md border-b border-gray-200 dark:border-border">
       <div className="max-w-[1400px] mx-auto px-6 h-14 flex items-center gap-6">
@@ -17,7 +17,7 @@ export default function Navbar({ searchQuery, onSearchChange, hideSearch = false
           {NAV_LINKS.map(n => (
             <span
               key={n}
-              onClick={() => onSearchChange(n.toLowerCase())}
+              onClick={() => onSearch && onSearch(n.toLowerCase())}
               className="text-[10px] font-mono text-muted hover:text-[#0F1116] dark:hover:text-white px-3 py-1 border border-transparent hover:border-gray-300 dark:hover:border-border cursor-pointer transition-colors tracking-widest"
             >
               [{' '}{n}{' '}]
@@ -27,25 +27,35 @@ export default function Navbar({ searchQuery, onSearchChange, hideSearch = false
 
         {/* Search — hidden on home view */}
         {!hideSearch && (
-          <div className="flex-1 max-w-lg relative ml-auto">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-            <input
-              type="text"
-              placeholder="SEARCH — iphone 17, macbook pro…"
-              value={searchQuery}
-              onChange={e => onSearchChange(e.target.value)}
-              className="w-full pl-9 pr-9 py-2 bg-panel border border-border text-white text-xs font-mono
-                         placeholder:text-muted focus:outline-none focus:border-accent-dim
-                         transition-colors tracking-wider"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => onSearchChange('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-white transition-colors"
-              >
-                <X size={13} />
-              </button>
-            )}
+          <div className="flex-1 max-w-lg flex items-center gap-2 ml-auto">
+            <div className="flex-1 relative">
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+              <input
+                type="text"
+                placeholder="SEARCH — iphone 17, macbook pro…"
+                value={searchQuery}
+                onChange={e => onSearchChange(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && onSearch && onSearch()}
+                className="w-full pl-9 pr-9 py-2 bg-panel border border-border text-white text-xs font-mono
+                           placeholder:text-muted focus:outline-none focus:border-accent-dim
+                           transition-colors tracking-wider"
+              />
+              {searchQuery && (
+                <button
+                  onClick={onClear}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-white transition-colors"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+            <button
+              onClick={() => onSearch && onSearch()}
+              className="flex-shrink-0 px-4 py-2 border border-border text-muted hover:border-accent hover:text-accent
+                         font-mono text-[10px] tracking-[0.15em] transition-colors"
+            >
+              GO
+            </button>
           </div>
         )}
 
