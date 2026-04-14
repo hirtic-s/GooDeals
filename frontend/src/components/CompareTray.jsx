@@ -39,7 +39,6 @@ export default function CompareTray({ groups, compareIds, onRemove, onClearAll }
               <tr>
                 <td className="pr-8 pb-3 text-[9px] font-mono text-muted tracking-[0.2em] w-20">SPEC</td>
                 {compared.map(g => {
-                  const opt = g.storageOptions[0];
                   return (
                     <th key={g.id} className="px-4 pb-3 text-left align-top min-w-[180px]">
                       <div className="flex items-start gap-3">

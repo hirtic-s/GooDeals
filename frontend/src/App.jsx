@@ -5,6 +5,7 @@ import CompareTray from './components/CompareTray';
 import { MOCK_PRODUCTS, PRICE_MAX } from './data/mockProducts';
 import Sidebar from './components/Sidebar';
 import { SlidersHorizontal } from 'lucide-react';
+import ChatBubble from './components/ChatBubble';
 
 const DEFAULT_FILTERS = {
   priceRange: [0, PRICE_MAX],
@@ -71,12 +72,19 @@ function parseProductInfo(title) {
 }
 
 function extractStorage(title, existing) {
-  if (existing) return existing;
-  // Prefer parenthetical storage: "(Black, 256 GB)" → "256 GB"
-  const parenM = title.match(/\(\s*[^,)]+,\s*(\d+\s*(?:GB|TB))\s*\)/i);
-  if (parenM) return parenM[1].replace(/\s+/, ' ').trim();
-  const m = title.match(/\b(\d+)\s*(GB|TB)\b/i);
-  return m ? `${m[1]} ${m[2].toUpperCase()}` : null;
+  // Always returns a normalized, whitespace-free uppercase string (e.g. "128GB", "1TB") or null.
+  let raw = null;
+  if (existing) {
+    raw = existing;
+  } else {
+    const parenM = title.match(/\(\s*[^,)]+,\s*(\d+\s*(?:GB|TB))\s*\)/i);
+    if (parenM) raw = parenM[1];
+    else {
+      const m = title.match(/\b(\d+)\s*(GB|TB)\b/i);
+      if (m) raw = `${m[1]}${m[2]}`;
+    }
+  }
+  return raw ? raw.replace(/\s+/g, '').toUpperCase() : null;
 }
 
 function groupByColor(products) {
@@ -108,6 +116,14 @@ function groupByColor(products) {
   return Array.from(groups.values());
 }
 
+function detectCategory(title) {
+  const t = (title || '').toLowerCase();
+  if (/laptop|notebook|macbook|chromebook|thinkpad|zenbook|vivobook|ideapad|aspire|pavilion|inspiron|omen|envy|spectre/.test(t)) return 'Laptop';
+  if (/tablet|ipad|galaxy tab/.test(t)) return 'Tablet';
+  if (/watch|band|wearable|fitbit|garmin/.test(t)) return 'Wearable';
+  return 'Mobile';
+}
+
 function mapApiResult(r, index) {
   const storeName = r.storeName?.toLowerCase().includes('amazon') ? 'Amazon' : 'Flipkart';
   const price = Number(r.price) || 0;
@@ -115,7 +131,7 @@ function mapApiResult(r, index) {
     id: `api-${index}`,
     title: r.productName,
     brand: r.brand,
-    category: 'Mobile',
+    category: detectCategory(r.productName),
     currentPrice: price,
     originalPrice: price,
     avgPrice7d: price,
@@ -143,10 +159,15 @@ export default function App() {
     if (!searchQuery.trim()) {
       setSearchResults(null);
       setIsSearching(false);
+      setFilters(DEFAULT_FILTERS);
+      setActiveCategory('ALL');
       return;
     }
     clearTimeout(debounceRef.current);
     setIsSearching(true);
+    setSearchResults(null);
+    setFilters(DEFAULT_FILTERS);
+    setActiveCategory('ALL');
     debounceRef.current = setTimeout(async () => {
       try {
         const res = await fetch(
@@ -154,7 +175,10 @@ export default function App() {
         );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        setSearchResults((data.results || []).map(mapApiResult));
+        const mapped = (data.results || []).map(mapApiResult);
+        const maxPrice = mapped.reduce((m, p) => Math.max(m, p.currentPrice || 0), PRICE_MAX);
+        setFilters(f => ({ ...f, priceRange: [f.priceRange[0], maxPrice] }));
+        setSearchResults(mapped);
       } catch (e) {
         console.error('Search failed', e);
         setSearchResults([]);
@@ -167,17 +191,54 @@ export default function App() {
 
   const baseProducts = searchResults !== null ? searchResults : MOCK_PRODUCTS;
 
+  // Derive filter options exclusively from real search results, never from mock fallback data.
+  // searchResults is null before any search, [] on empty results, [...] on hits.
+  const filterSource = useMemo(() => searchResults ?? [], [searchResults]);
+
+  const resultsMaxPrice = useMemo(() => {
+    if (filterSource.length === 0) return PRICE_MAX;
+    return Math.max(PRICE_MAX, ...filterSource.map(p => p.currentPrice || 0));
+  }, [filterSource]);
+
+  const availableBrands = useMemo(() => {
+    const seen = new Set();
+    for (const p of filterSource) {
+      if (p.brand && p.brand.trim()) seen.add(p.brand.trim());
+    }
+    return [...seen].sort();
+  }, [filterSource]);
+
+  const availableStorages = useMemo(() => {
+    const seen = new Set();
+    for (const p of filterSource) {
+      const s = extractStorage(p.title, p.storage);
+      if (s) seen.add(s);
+    }
+    return [...seen].sort((a, b) => parseStorageGB(a) - parseStorageGB(b));
+  }, [filterSource]);
+
+  const availableRams = useMemo(() => {
+    const seen = new Set();
+    for (const p of filterSource) {
+      if (p.ram) seen.add(p.ram.replace(/\s+/g, '').toUpperCase());
+    }
+    return [...seen].sort();
+  }, [filterSource]);
+
   const filteredProducts = useMemo(() => {
     const { priceRange, brands, stores, rams, storages } = filters;
     return baseProducts.filter(p => {
       if (activeCategory !== 'ALL' && !activeCategory.startsWith(p.category.toUpperCase())) return false;
       if (p.currentPrice < priceRange[0] || p.currentPrice > priceRange[1]) return false;
-      if (brands.length > 0 && !brands.includes(p.brand)) return false;
+      if (brands.length > 0 && !brands.includes((p.brand || '').trim())) return false;
       if (stores.length > 0 && !stores.includes(p.storeSource)) return false;
-      if (rams.length > 0 && !rams.includes(p.ram)) return false;
+      if (rams.length > 0) {
+        const pRam = p.ram ? p.ram.replace(/\s+/g, '').toUpperCase() : null;
+        if (!rams.includes(pRam)) return false;
+      }
       if (storages.length > 0) {
-        const storage = extractStorage(p.title, p.storage);
-        if (!storages.includes(storage)) return false;
+        const pStorage = extractStorage(p.title, p.storage);
+        if (!storages.includes(pStorage)) return false;
       }
       return true;
     });
@@ -290,12 +351,18 @@ export default function App() {
 
             {/* Content */}
             <div className="flex gap-6 items-start">
-            <Sidebar
-              filters={filters}
-              onChange={setFilters}
-              onReset={() => setFilters(DEFAULT_FILTERS)}
-              isDark={isDark}
-            />
+            {!isSearching && searchResults !== null && (
+              <Sidebar
+                filters={filters}
+                onChange={setFilters}
+                onReset={() => setFilters(DEFAULT_FILTERS)}
+                isDark={isDark}
+                availableBrands={availableBrands}
+                availableStorages={availableStorages}
+                availableRams={availableRams}
+                priceMax={resultsMaxPrice}
+              />
+            )}
             <div className="flex-1 min-w-0">
             {isSearching ? (
               <div className="flex flex-col items-center gap-4 py-32 text-center border border-gray-200 dark:border-border">
@@ -363,6 +430,8 @@ export default function App() {
       />
 
       {compareIds.size > 0 && <div className="h-52" />}
+
+      <ChatBubble />
     </div>
   );
 }
