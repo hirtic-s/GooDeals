@@ -16,6 +16,8 @@ public record ChatAction(
      *
      * @param priceRange two-element array [minPrice, maxPrice] in ₹
      * @param brands     brand names to pre-select; empty list means no brand filter
+     * @param rams       RAM options to pre-select (e.g. ["8GB", "16GB"]); empty list means no RAM filter
+     * @param storages   storage options to pre-select (e.g. ["128GB", "256GB"]); empty list means no storage filter
      */
-    public record ChatActionFilters(long[] priceRange, List<String> brands) {}
+    public record ChatActionFilters(long[] priceRange, List<String> brands, List<String> rams, List<String> storages) {}
 }

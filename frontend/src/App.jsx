@@ -217,6 +217,8 @@ export default function App() {
               chatFilters?.priceRange?.[1] != null ? chatFilters.priceRange[1] : maxPrice,
             ],
             brands: chatFilters?.brands?.length ? chatFilters.brands : [],
+            rams: chatFilters?.rams?.length ? chatFilters.rams : [],
+            storages: chatFilters?.storages?.length ? chatFilters.storages : [],
           });
 
           setSearchResults(mapped);

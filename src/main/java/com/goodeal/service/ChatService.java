@@ -39,7 +39,7 @@ public class ChatService {
     private static final Logger log = LoggerFactory.getLogger(ChatService.class);
 
     private static final String GEMINI_BASE_URL =
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=";
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=";
 
     @Value("${goodeal.gemini.api-key}")
     private String geminiApiKey;
@@ -50,24 +50,28 @@ public class ChatService {
             + "You will receive a user query and live price data from Amazon and Flipkart.\n\n"
             + "ALWAYS respond with a raw JSON object — no markdown fences, no extra text outside the JSON:\n"
             + "{\n"
-            + "  \"reply\": \"Your conversational recommendation (max 4 sentences, no markdown headers or bullets)\",\n"
+            + "  \"reply\": \"Short confirmation of the search being triggered (1 sentence max, no product listings)\",\n"
             + "  \"action\": {\n"
             + "    \"type\": \"SEARCH\",\n"
-            + "    \"query\": \"product search term\",\n"
+            + "    \"query\": \"product search term without storage/RAM qualifiers\",\n"
             + "    \"filters\": {\n"
             + "      \"priceRange\": [0, 80000],\n"
-            + "      \"brands\": []\n"
+            + "      \"brands\": [],\n"
+            + "      \"rams\": [],\n"
+            + "      \"storages\": []\n"
             + "    }\n"
             + "  }\n"
             + "}\n\n"
             + "Rules:\n"
             + "- Set \"action\" to null when the user is NOT asking to find or buy a product (e.g. just chatting).\n"
             + "- When the user IS searching for a product, populate \"action\":\n"
-            + "  - \"query\": the core product search term (e.g. \"iPhone 15 Pro\", \"gaming laptop\")\n"
+            + "  - \"query\": the core product name ONLY — strip out storage (128GB, 256GB, 1TB…) and RAM (8GB, 16GB…) from this field; those go in filters instead\n"
             + "  - \"filters.priceRange\": [minPrice, maxPrice] in ₹; use [0, 10000000] if no budget is mentioned\n"
             + "  - \"filters.brands\": brand names if the user specified any, otherwise []\n"
-            + "- Be opinionated, India-market-aware, and keep the reply under 4 sentences.\n"
-            + "- The reply should confirm the action being taken (e.g. 'Scanning for iPhones under ₹80,000 now...').";
+            + "  - \"filters.rams\": RAM values the user mentioned (e.g. [\"8GB\", \"16GB\"]), normalized to uppercase with no spaces; [] if none\n"
+            + "  - \"filters.storages\": storage values the user mentioned (e.g. [\"128GB\", \"256GB\", \"1TB\"]), normalized to uppercase with no spaces; [] if none\n"
+            + "- NEVER list products, prices, or recommendations in the \"reply\" field.\n"
+            + "- The \"reply\" must be ONE short sentence confirming what is being searched (e.g. 'Searching for iPhone 17 with 128GB storage now...').";
 
     private final SearchService searchService;
     private final RestTemplate restTemplate = new RestTemplate();
@@ -87,7 +91,7 @@ public class ChatService {
         // Run on a virtual thread so the HTTP calls don't block a platform thread
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
             var future = executor.submit(() -> {
-                String context = fetchPriceContext(userMessage);
+                String context = fetchPriceContext(stripSpecTokens(userMessage));
 
                 // No results means the scraper found nothing — skip Gemini entirely
                 // to conserve API quota and give the user actionable advice instead.
@@ -151,6 +155,22 @@ public class ChatService {
     // -----------------------------------------------------------------------
     // Private helpers
     // -----------------------------------------------------------------------
+
+    /**
+     * Strips storage (e.g. "128GB", "1TB") and RAM (e.g. "8GB") tokens from a
+     * raw user message so the scraper receives a clean product-name query.
+     * Budget phrases like "under 40k" or "below ₹80000" are also removed.
+     */
+    private static String stripSpecTokens(String message) {
+        return message
+                // storage / RAM: digits followed by GB or TB (e.g. "128GB", "1 TB", "16gb")
+                .replaceAll("(?i)\\b\\d+\\s*(?:GB|TB)\\b", "")
+                // budget phrases: "under 40k", "below ₹80000", "within 50,000"
+                .replaceAll("(?i)\\b(?:under|below|within|upto|up to)\\s*[₹]?[\\d,]+[k]?\\b", "")
+                // collapse extra whitespace
+                .replaceAll("\\s{2,}", " ")
+                .trim();
+    }
 
     /**
      * Fetches live price data and formats it as a context string for Gemini.
