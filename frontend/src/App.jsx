@@ -145,6 +145,27 @@ function mapApiResult(r, index) {
 
 const CATEGORY_CHIPS = ['ALL', 'MOBILES', 'LAPTOPS', 'TABLETS', 'WEARABLES'];
 
+const SEARCH_WORDS = ['MOBILES', 'LAPTOPS', 'CONSOLES'];
+
+function useCyclingWord(words, interval = 2200) {
+  const [index, setIndex] = useState(0);
+  const [phase, setPhase] = useState('idle'); // 'idle' | 'exit' | 'enter'
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setPhase('exit');
+      setTimeout(() => {
+        setIndex(i => (i + 1) % words.length);
+        setPhase('enter');
+        setTimeout(() => setPhase('idle'), 500);
+      }, 280);
+    }, interval);
+    return () => clearInterval(timer);
+  }, [words, interval]);
+
+  return { word: words[index], phase };
+}
+
 export default function App() {
   const [isDark, setIsDark] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -302,6 +323,7 @@ export default function App() {
     });
   }
 
+  const { word: cyclingWord, phase: wordPhase } = useCyclingWord(SEARCH_WORDS);
   const heroGroup = colorGroups[0] ?? null;
   const gridGroups = colorGroups.slice(1);
 
@@ -326,17 +348,52 @@ export default function App() {
           <div className="flex flex-col items-center justify-center min-h-[80vh] gap-8">
             {/* Giant search input */}
             <div className="w-full max-w-3xl border-b-2 border-[#0F1116] dark:border-white flex items-center gap-4">
-              <input
-                type="text"
-                placeholder="SEARCH STORES..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSearch()}
-                autoFocus
-                className="flex-1 bg-transparent text-[#0F1116] dark:text-white text-6xl font-mono font-black
-                           placeholder:text-muted caret-accent
-                           focus:outline-none py-4 tracking-tight"
-              />
+              <div className="relative flex-1">
+                {!searchQuery && (
+                  <>
+                    <style>{`
+                      @keyframes wordExit {
+                        0%   { transform: translateY(0);     opacity: 1; }
+                        100% { transform: translateY(-110%); opacity: 0; }
+                      }
+                      @keyframes wordEnter {
+                        0%   { transform: translateY(110%);  opacity: 0; }
+                        60%  { transform: translateY(-8%);   opacity: 1; }
+                        80%  { transform: translateY(4%);               }
+                        100% { transform: translateY(0);                }
+                      }
+                    `}</style>
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-0 flex items-center text-6xl font-mono font-black tracking-tight text-muted py-4 overflow-hidden"
+                    >
+                      SEARCH
+                      <span
+                        key={cyclingWord}
+                        className="ml-[0.25em] inline-block"
+                        style={{
+                          animation:
+                            wordPhase === 'exit'  ? 'wordExit 0.28s ease-in forwards' :
+                            wordPhase === 'enter' ? 'wordEnter 0.5s cubic-bezier(0.22,1,0.36,1) forwards' :
+                            'none',
+                        }}
+                      >
+                        {cyclingWord}
+                      </span>
+                      ...
+                    </span>
+                  </>
+                )}
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                  autoFocus
+                  className="w-full bg-transparent text-[#0F1116] dark:text-white text-6xl font-mono font-black
+                             caret-accent focus:outline-none py-4 tracking-tight"
+                />
+              </div>
               <button
                 onClick={handleSearch}
                 disabled={!searchQuery.trim()}
