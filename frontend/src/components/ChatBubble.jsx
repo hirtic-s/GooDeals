@@ -37,7 +37,10 @@ export default function ChatBubble({ onExecuteSearch }) {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setMessages(prev => [...prev, { role: 'assistant', text: data.reply }]);
+      setMessages(prev => [
+        ...prev,
+        { role: 'assistant', text: data.reply, items: data.items ?? null },
+      ]);
 
       const action = data.action;
       if (action?.type === 'SEARCH' && action.query && onExecuteSearch) {
@@ -115,6 +118,52 @@ export default function ChatBubble({ onExecuteSearch }) {
                     }`}
                 >
                   {msg.text}
+
+                  {/* ── Inline product cards ── */}
+                  {msg.items && msg.items.length > 0 && (
+                    <div className="mt-2 flex flex-col gap-2">
+                      {msg.items.map((item, idx) => (
+                        <a
+                          key={idx}
+                          href={item.productUrl ?? '#'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 border border-[#6cb4e4]/40 bg-[#6cb4e4]/5
+                                     hover:bg-[#6cb4e4]/10 hover:border-[#6cb4e4]/70 transition-colors p-2 no-underline"
+                        >
+                          {/* Thumbnail */}
+                          <div className="w-10 h-10 shrink-0 bg-white/10 flex items-center justify-center overflow-hidden">
+                            {item.imageUrl
+                              ? <img src={item.imageUrl} alt="" className="w-full h-full object-contain" />
+                              : <span className="text-[8px] text-muted">IMG</span>
+                            }
+                          </div>
+
+                          {/* Info */}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white text-[10px] font-mono leading-tight truncate">
+                              {item.productName ?? 'Unknown product'}
+                            </p>
+                            <p className="text-muted text-[9px] font-mono mt-0.5">
+                              {item.storeName ?? ''}
+                            </p>
+                          </div>
+
+                          {/* Price + CTA */}
+                          <div className="shrink-0 text-right">
+                            <p className="text-[#6cb4e4] text-[10px] font-mono font-semibold">
+                              {item.price != null
+                                ? `₹${Number(item.price).toLocaleString('en-IN')}`
+                                : '—'}
+                            </p>
+                            <span className="text-[8px] text-muted font-mono tracking-widest uppercase">
+                              Buy →
+                            </span>
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

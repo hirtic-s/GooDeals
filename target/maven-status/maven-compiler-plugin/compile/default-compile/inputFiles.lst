@@ -22,4 +22,5 @@
 /Users/hirticc/Desktop/Projects/GooDeals/src/main/java/com/goodeal/controller/SearchController.java
 /Users/hirticc/Desktop/Projects/GooDeals/src/main/java/com/goodeal/scraper/AbstractScraper.java
 /Users/hirticc/Desktop/Projects/GooDeals/src/main/java/com/goodeal/exception/ResourceNotFoundException.java
+/Users/hirticc/Desktop/Projects/GooDeals/src/main/java/com/goodeal/dto/ChatAction.java
 /Users/hirticc/Desktop/Projects/GooDeals/src/main/java/com/goodeal/dto/SearchResponseDto.java
