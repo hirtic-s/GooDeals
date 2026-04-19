@@ -412,7 +412,7 @@ export default function App() {
                 [ TRENDING SEARCHES ]
               </p>
               <div className="flex gap-3 flex-wrap">
-                {['iPhone 15', 'MacBook M3', 'S24 Ultra'].map(term => (
+                {['iPhone 17', 'MacBook Pro M5', 'S26 Ultra'].map(term => (
                   <button
                     key={term}
                     onClick={() => handleSearchWith(term)}
